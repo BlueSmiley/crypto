@@ -8,11 +8,55 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from multiprocessing.connection import Listener
 from multiprocessing.connection import Client
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
 import threading
 import random
 import queue
 import os
 import time
+
+
+def openFile(f, filename,drive):
+    file_list = drive.ListFile({'q': "'1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY' in parents and trashed=false"}).GetList()
+    for file1 in file_list:
+        if file1["title"] == filename:
+            encoded = file1.GetContentString()    
+            #print(encoded)  
+            unencoded = f.decrypt(encoded.encode())
+            print(unencoded)
+
+def getSymKey(address,username,port,group_address,group_listener,private_key):
+    public_key = private_key.public_key()
+    conn = Client(address, authkey=b'secret password')
+    conn.send([
+        username,
+        port,
+        public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )])
+    conn.close()
+
+    group_conn = group_listener.accept()
+
+    encryptedKey = b"error"
+    try:
+        encryptedKey = group_conn.recv()
+    except:
+        pass
+    group_conn.close()
+
+    symkey = private_key.decrypt(
+        encryptedKey,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return symkey
+
 
 def main():
     username = input("Enter username: ")
@@ -26,81 +70,24 @@ def main():
             )
         save_key(key,username)
 
-    public_key = key.public_key()
-    address = ('localhost', 6000)
-    conn = Client(address, authkey=b'secret password')
-    port = random.randint(6001,7000)
-    #conn.send(["testing","two"])
-    conn.send([
-        username,
-        port,
-        public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )])
-    conn.close()
 
+    gauth = GoogleAuth()
+    gauth.LocalWebserverAuth()
+
+    drive = GoogleDrive(gauth)
+
+    address = ('localhost', 6000)
+    port = random.randint(6001,7000)
     group_address = ('localhost', port)     # family is deduced to be 'AF_INET'
     group_listener = Listener(group_address, authkey=b'secret password')
-    group_conn = group_listener.accept()
 
-    encryptedKey = b"error"
-    try:
-        encryptedKey = group_conn.recv()
-    except:
-        pass
-    group_conn.close()
-
-    symkey = key.decrypt(
-        encryptedKey,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
+    symkey = getSymKey(address,username,port,group_address,group_listener,key)
     #time.sleep(10)
     while(True):
-        try:
-            filename = input("Enter filename: ")
-            f = Fernet(symkey)
-            with open (os.path.join("groupFiles",filename),'rb') as decryptfile:
-                encoded = decryptfile.read()
-                
-            #print(encoded)  
-            unencoded = f.decrypt(encoded)
-            print(unencoded)
-        except:
-            conn = Client(address, authkey=b'secret password')
-            conn.send([
-                username,
-                port,
-                public_key.public_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo
-                )
-            ])
-            conn.close()
-            group_conn = group_listener.accept()
-            try:
-                encryptedKey = group_conn.recv()
-            except:
-                pass
-            symkey = key.decrypt(
-                encryptedKey,
-                padding.OAEP(
-                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                    algorithm=hashes.SHA256(),
-                    label=None
-                )
-            )
-            f = Fernet(symkey)
-            with open (os.path.join("groupFiles",filename),'rb') as decryptfile:
-                encoded = decryptfile.read()
-                
-            #print(encoded)  
-            unencoded = f.decrypt(encoded)
-            print(unencoded)
+        filename = input("Enter filename: ")
+        symkey = getSymKey(address,username,port,group_address,group_listener,key)
+        f = Fernet(symkey)
+        openFile(f,filename,drive)
 
 def save_key(key, filename):
     pem = key.private_bytes(
