@@ -17,7 +17,7 @@ import os
 import time
 
 
-def openFile(f, filename,drive):
+def openFile(drive,filename,f):
     file_list = drive.ListFile({'q': "'1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY' in parents and trashed=false"}).GetList()
     for file1 in file_list:
         if file1["title"] == filename:
@@ -25,6 +25,13 @@ def openFile(f, filename,drive):
             #print(encoded)  
             unencoded = f.decrypt(encoded.encode())
             print(unencoded)
+
+
+def uploadFile(drive,filename,f):
+    file4 = drive.CreateFile({"parents": [{"kind": "drive#fileLink", "id": "1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY"}],'title':filename})
+    with open (os.path.join("groupFiles",filename),'rb') as uploadfile:
+        file4.SetContentString(f.encrypt(uploadfile.read()).decode())
+    file4.Upload()
 
 def getSymKey(address,username,port,group_address,group_listener,private_key):
     public_key = private_key.public_key()
@@ -83,11 +90,19 @@ def main():
 
     symkey = getSymKey(address,username,port,group_address,group_listener,key)
     #time.sleep(10)
-    while(True):
-        filename = input("Enter filename: ")
+    endProgram = False
+    while not endProgram:
+        command = input("Enter <add filename> or <open filename>: ")
         symkey = getSymKey(address,username,port,group_address,group_listener,key)
         f = Fernet(symkey)
-        openFile(f,filename,drive)
+        if command.split(" ")[0] == "open":
+            filename = command.split(" ")[1]
+            openFile(drive,filename,f)
+        elif command.split(" ")[0] == "add":
+            filename = command.split(" ")[1]
+            uploadFile(drive,filename,f)
+        else:
+            endProgram = True
 
 def save_key(key, filename):
     pem = key.private_bytes(

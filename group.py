@@ -75,6 +75,10 @@ def decryptAllFiles(f,filelist):
         file1.SetContentString(unencoded.decode())
         file1.Upload()
 
+def deleteAllFiles(filelist):
+    for file1 in filelist: 
+        file1.Delete() 
+
 def main():
     try:
         with open('groupkeys/symkey.txt', 'rb') as file:
@@ -89,8 +93,8 @@ def main():
     gauth.LocalWebserverAuth()
 
     drive = GoogleDrive(gauth)
-    file_list = drive.ListFile({'q': "'1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY' in parents and trashed=false"}).GetList()
-    encryptAllFiles(f,file_list)
+    # file_list = drive.ListFile({'q': "'1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY' in parents and trashed=false"}).GetList()
+    # encryptAllFiles(f,file_list)
 
     address = ('localhost', 6000)     # family is deduced to be 'AF_INET'
     listener = Listener(address, authkey=b'secret password')
@@ -121,7 +125,8 @@ def main():
             endProgram = True
         lock.release()
     #cleanup to restore files back to decrypted for easy testing
-    decryptAllFiles(f,file_list)
+    file_list = drive.ListFile({'q': "'1gPPLp6BmCAqWxYXDPv8E38H4ZVBe64bY' in parents and trashed=false"}).GetList()
+    deleteAllFiles(file_list)
 
 
 
